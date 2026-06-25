@@ -1,0 +1,31 @@
+{
+  "characters":[
+    {"name":"Armando","img":"characters/character_06.png"},
+    {"name":"Xime","img":"characters/character_05.png"},
+    {"name":"Ceci","img":"characters/character_04.png"},
+    {"name":"Claudia","img":"characters/character_03.png"},
+    {"name":"Kena","img":"characters/character_02.png"},
+    {"name":"Keka","img":"characters/character_01.png"},
+    {"name":"Roly","img":"characters/character_00.png"},
+    {"name":"Sergio","img":"characters/character_00.png"}
+  ],
+  "weapons":[
+    {"name":"cuchillos de la tira cuchillos","img":"weapons/weapon_07.png"},
+    {"name":"llave inglesa","img":"weapons/weapon_06.png"},
+    {"name":"carro de feria","img":"weapons/weapon_05.png"},
+    {"name":"la frutera","img":"weapons/weapon_04.png"},
+    {"name":"los zapatones de la keka","img":"weapons/weapon_03.png"},
+    {"name":"las muletas del yayo","img":"weapons/weapon_02.png"},
+    {"name":"revolver sin balas del camilo","img":"weapons/weapon_01.png"}
+  ],
+  "locations":[
+    {"name":"perno stock","img":"locations/location_01.png"},
+    {"name":"lourdes 29","img":"locations/location_02.png"},
+    {"name":"la covico","img":"locations/location_03.png"},
+    {"name":"punta mira","img":"locations/location_04.png"},
+    {"name":"sindempart","img":"locations/location_05.png"},
+    {"name":"las torres","img":"locations/location_06.png"},
+    {"name":"la parte alta","img":"locations/location_07.png"},
+    {"name":"la población","img":"locations/location_08.png"}
+  ]
+}
