@@ -1,6 +1,7 @@
 // src/App.tsx
 import { useGameStore } from './store/gameEngine';
 import CoverScreen from './components/CoverScreen';
+import PlayerHand from './components/PlayerHand';
 
 function App() {
   // Escuchamos directamente esta variable de nuestro motor
@@ -27,11 +28,7 @@ function App() {
               <div key={p.id} className="bg-[#1E1E24] p-4 rounded-xl border border-gray-700">
                 <h4 className="font-bold text-blue-300">{p.name} ({p.type})</h4>
                 <p className="text-xs text-gray-400 mt-2">Cartas en mano:</p>
-                <ul className="text-sm list-disc list-inside">
-                  {p.hand.map((card, i) => (
-                    <li key={i}>{card}</li>
-                  ))}
-                </ul>
+                <PlayerHand />
               </div>
             ))}
           </div>
