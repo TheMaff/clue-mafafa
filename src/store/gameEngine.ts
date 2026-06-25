@@ -22,11 +22,13 @@ interface GameState {
     envelope: Envelope | null;
     turnIndex: number;
     isGameActive: boolean;
+    notes: Record<string, boolean>;
 
     // Acciones
     startGame: (humans: { name: string; avatar: string }[], cpus: { name: string; avatar: string }[]) => void;
     nextTurn: () => void;
     eliminatePlayer: (playerId: string) => void;
+    toggleNote: (cardName: string) => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -35,6 +37,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     envelope: null,
     turnIndex: 0,
     isGameActive: false,
+    notes: {},
 
     // Iniciar el juego: barajar y repartir
     startGame: (humans, cpus) => {
@@ -75,12 +78,23 @@ export const useGameStore = create<GameState>((set, get) => ({
             playerToReceive.hand.push(cardName);
         });
 
+        // Autotachar las cartas en la libreta para los jugadores humanos
+        const initialNotes: Record<string, boolean> = {};
+        allPlayers.forEach(player => {
+            if (player.type === 'human') {
+                player.hand.forEach(card => {
+                    initialNotes[card] = true; // Si está en mi mano, la marco como tachada
+                });
+            }
+        });
+
         // 6. Arrancar la partida
         set({
             players: allPlayers,
             envelope: secretEnvelope,
             turnIndex: 0,
             isGameActive: true,
+            notes: initialNotes,
         });
     },
 
@@ -103,5 +117,15 @@ export const useGameStore = create<GameState>((set, get) => ({
             p.id === playerId ? { ...p, isEliminated: true } : p
         );
         set({ players: updatedPlayers });
+    },
+
+    toggleNote: (cardName) => {
+        const { notes } = get();
+        set({
+            notes: {
+                ...notes,
+                [cardName]: !notes[cardName] // Invierte el valor actual
+            }
+        });
     }
 }));

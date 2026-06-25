@@ -9,9 +9,9 @@ export default function Board() {
 
     // Insertamos un objeto vacío en el índice 4 (el centro) para lograr el grid 3x3 perfecto
     const boardCells = [
-        ...gameData.locations.slice(0, 4),
-        { name: 'centro', img: null, isCenter: true },
-        ...gameData.locations.slice(4, 8)
+        ...gameData.locations.slice(0, 4).map(loc => ({ ...loc, isCenter: false })),
+        { name: 'centro', img: '', isCenter: true },
+        ...gameData.locations.slice(4, 8).map(loc => ({ ...loc, isCenter: false }))
     ];
 
     const handleEnterRoom = (roomName: string) => {

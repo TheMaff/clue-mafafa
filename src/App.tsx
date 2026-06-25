@@ -3,6 +3,7 @@ import { useGameStore } from './store/gameEngine';
 import CoverScreen from './components/CoverScreen';
 import PlayerHand from './components/PlayerHand';
 import Board from './components/Board';
+import Notebook from './components/Notebook';
 
 function App() {
   const isGameActive = useGameStore((state) => state.isGameActive);
@@ -29,7 +30,12 @@ function App() {
       )}
 
       {/* Renderizado condicional del panel inferior */}
-      {isGameActive && <PlayerHand />}
+      {isGameActive && (
+        <>
+          <PlayerHand />
+          <Notebook />
+        </>
+      )}
     </div>
   );
 }
