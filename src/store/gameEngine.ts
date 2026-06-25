@@ -22,13 +22,14 @@ interface GameState {
     envelope: Envelope | null;
     turnIndex: number;
     isGameActive: boolean;
-    notes: Record<string, boolean>;
+    notes: Record<string, Record<string, boolean>>;
 
     // Acciones
     startGame: (humans: { name: string; avatar: string }[], cpus: { name: string; avatar: string }[]) => void;
     nextTurn: () => void;
     eliminatePlayer: (playerId: string) => void;
-    toggleNote: (cardName: string) => void;
+    // Le pasamos el ID del jugador que está tachando la nota
+    toggleNote: (playerId: string, cardName: string) => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -79,11 +80,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
 
         // Autotachar las cartas en la libreta para los jugadores humanos
-        const initialNotes: Record<string, boolean> = {};
+        const initialNotes: Record<string, Record<string, boolean>> = {};
         allPlayers.forEach(player => {
+            // Creamos una libreta en blanco para CADA jugador
+            initialNotes[player.id] = {};
             if (player.type === 'human') {
                 player.hand.forEach(card => {
-                    initialNotes[card] = true; // Si está en mi mano, la marco como tachada
+                    initialNotes[player.id][card] = true;
                 });
             }
         });
@@ -119,12 +122,17 @@ export const useGameStore = create<GameState>((set, get) => ({
         set({ players: updatedPlayers });
     },
 
-    toggleNote: (cardName) => {
+    toggleNote: (playerId, cardName) => {
         const { notes } = get();
+        const playerNotes = notes[playerId] || {}; // Obtenemos la libreta de ese jugador
+
         set({
             notes: {
                 ...notes,
-                [cardName]: !notes[cardName] // Invierte el valor actual
+                [playerId]: {
+                    ...playerNotes,
+                    [cardName]: !playerNotes[cardName] // Invierte el valor actual solo para él
+                }
             }
         });
     }

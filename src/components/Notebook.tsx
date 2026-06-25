@@ -5,10 +5,22 @@ import gameData from '../data/game-data.json';
 
 export default function Notebook() {
     const [isOpen, setIsOpen] = useState(false);
-    const notes = useGameStore((state) => state.notes);
+
+    // Traemos los datos del jugador actual
+    const players = useGameStore((state) => state.players);
+    const turnIndex = useGameStore((state) => state.turnIndex);
+    const currentPlayer = players[turnIndex];
+
+    // Traemos TODAS las libretas y la función
+    const allNotes = useGameStore((state) => state.notes);
     const toggleNote = useGameStore((state) => state.toggleNote);
 
-    // Función auxiliar para renderizar cada bloque de la libreta
+    // Si no hay jugador (o si es CPU y no queremos que use la UI), no mostramos la libreta
+    if (!currentPlayer || currentPlayer.type !== 'human') return null;
+
+    // Aislamos SOLO las notas de este jugador
+    const myNotes = allNotes[currentPlayer.id] || {};
+
     const renderCategory = (title: string, items: { name: string }[]) => (
         <div className="mb-6">
             <h3 className="text-sm font-bold text-blue-400 mb-3 uppercase tracking-widest border-b border-gray-700 pb-1">
@@ -16,11 +28,14 @@ export default function Notebook() {
             </h3>
             <div className="flex flex-col gap-3">
                 {items.map((item) => {
-                    const isChecked = notes[item.name];
+                    // Revisamos nuestra libreta privada
+                    const isChecked = myNotes[item.name];
+
                     return (
                         <label key={item.name} className="flex items-center gap-3 cursor-pointer group">
                             <div
-                                onClick={() => toggleNote(item.name)} // ¡Aquí está la magia que faltaba!
+                                // Pasamos el ID del jugador a la función
+                                onClick={() => toggleNote(currentPlayer.id, item.name)}
                                 className={`w-5 h-5 rounded border flex items-center justify-center transition-colors 
                 ${isChecked ? 'bg-green-500 border-green-500' : 'bg-[#2C2D33] border-gray-500 group-hover:border-blue-400'}`}>
                                 {isChecked && (
