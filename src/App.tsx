@@ -1,122 +1,44 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+// src/App.tsx
+import { useGameStore } from './store/gameEngine';
+import CoverScreen from './components/CoverScreen';
 
 function App() {
-  const [count, setCount] = useState(0)
+  // Escuchamos directamente esta variable de nuestro motor
+  const isGameActive = useGameStore((state) => state.isGameActive);
+  const players = useGameStore((state) => state.players);
+  const envelope = useGameStore((state) => state.envelope);
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="min-h-screen bg-[#2C2D33] text-gray-100 font-sans selection:bg-purple-500 selection:text-white">
+      {!isGameActive ? (
+        <CoverScreen />
+      ) : (
+        <div className="p-8">
+          <h2 className="text-3xl font-bold text-green-400 mb-4">¡El juego ha comenzado!</h2>
 
-      <div className="ticks"></div>
+          {/* Un volcado temporal de datos para comprobar que el motor hizo su trabajo */}
+          <div className="bg-[#1E1E24] p-6 rounded-xl border border-gray-700 mb-4">
+            <h3 className="font-bold text-xl mb-2 text-red-400">Sobre Secreto (No mirar en producción 👀)</h3>
+            <pre className="text-sm text-gray-300">{JSON.stringify(envelope, null, 2)}</pre>
+          </div>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {players.map((p) => (
+              <div key={p.id} className="bg-[#1E1E24] p-4 rounded-xl border border-gray-700">
+                <h4 className="font-bold text-blue-300">{p.name} ({p.type})</h4>
+                <p className="text-xs text-gray-400 mt-2">Cartas en mano:</p>
+                <ul className="text-sm list-disc list-inside">
+                  {p.hand.map((card, i) => (
+                    <li key={i}>{card}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      )}
+    </div>
+  );
 }
 
-export default App
+export default App;

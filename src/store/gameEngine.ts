@@ -1,6 +1,6 @@
 // src/store/gameEngine.ts
 import { create } from 'zustand';
-import { GameData, Player, Envelope } from '../types';
+import type { GameData, Player, Envelope } from '../types';
 import gameDataJson from '../data/game-data.json';
 
 // Casteamos el JSON para que TypeScript confíe en su estructura
