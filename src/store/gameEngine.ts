@@ -30,6 +30,13 @@ interface GameState {
     eliminatePlayer: (playerId: string) => void;
     // Le pasamos el ID del jugador que está tachando la nota
     toggleNote: (playerId: string, cardName: string) => void;
+
+    // Guardará quién te mostró qué carta, o 'no-match' si nadie tiene nada
+    hypothesisResult: { refuterName: string; cardShown: string } | 'no-match' | null;
+
+    // Acciones
+    checkHypothesis: (suspect: string, weapon: string, location: string) => void;
+    clearHypothesisResult: () => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -39,6 +46,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     turnIndex: 0,
     isGameActive: false,
     notes: {},
+    hypothesisResult: null,
 
     // Iniciar el juego: barajar y repartir
     startGame: (humans, cpus) => {
@@ -135,5 +143,43 @@ export const useGameStore = create<GameState>((set, get) => ({
                 }
             }
         });
-    }
+    },
+
+    checkHypothesis: (suspect, weapon, location) => {
+        const { players, turnIndex } = get();
+        const cardsToCheck = [suspect, weapon, location];
+
+        let foundMatch = false;
+
+        // Empezamos a preguntar por el jugador a nuestra izquierda
+        let currentIndex = (turnIndex + 1) % players.length;
+
+        // Iteramos por toda la mesa hasta volver a nosotros mismos
+        while (currentIndex !== turnIndex) {
+            const rival = players[currentIndex];
+
+            if (!rival.isEliminated) {
+                // Vemos si el rival tiene alguna de las cartas sugeridas
+                const matchingCards = rival.hand.filter(card => cardsToCheck.includes(card));
+
+                if (matchingCards.length > 0) {
+                    // Si tiene, elige una al azar para mostrar (automatizado para agilizar el juego)
+                    const cardToShow = matchingCards[Math.floor(Math.random() * matchingCards.length)];
+
+                    set({ hypothesisResult: { refuterName: rival.name, cardShown: cardToShow } });
+                    foundMatch = true;
+                    break; // Rompemos el ciclo, ya nadie más debe mostrar cartas
+                }
+            }
+            // Pasamos al siguiente jugador
+            currentIndex = (currentIndex + 1) % players.length;
+        }
+
+        // Si dimos toda la vuelta y nadie tiene nada
+        if (!foundMatch) {
+            set({ hypothesisResult: 'no-match' });
+        }
+    },
+
+    clearHypothesisResult: () => set({ hypothesisResult: null }),
 }));
