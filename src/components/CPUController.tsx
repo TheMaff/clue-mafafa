@@ -4,29 +4,23 @@ import { useGameStore } from '../store/gameEngine';
 import gameData from '../data/game-data.json';
 
 export default function CPUController() {
-    const players = useGameStore((state) => state.players);
+    // SOLO nos suscribimos al cambio de turno.
     const turnIndex = useGameStore((state) => state.turnIndex);
-    const nextTurn = useGameStore((state) => state.nextTurn);
-    const notes = useGameStore((state) => state.notes);
-    const toggleNote = useGameStore((state) => state.toggleNote);
 
     const [cpuMessage, setCpuMessage] = useState<string | null>(null);
-
-    // NUEVO: Candado para evitar que el turno se ejecute múltiples veces por los cambios de estado
     const turnLock = useRef<number>(-1);
 
     useEffect(() => {
-        const currentPlayer = players[turnIndex];
+        // Leemos los datos fresquitos usando getState() para no crear suscripciones que rompan el Effect
+        const state = useGameStore.getState();
+        const currentPlayer = state.players[turnIndex];
 
         if (!currentPlayer || currentPlayer.type !== 'cpu' || currentPlayer.isEliminated) {
             setCpuMessage(null);
             return;
         }
 
-        // NUEVO: Si el candado tiene el número de este turno, abortamos. (Ya jugó)
         if (turnLock.current === turnIndex) return;
-
-        // Cerramos el candado marcando que este turno ya comenzó a procesarse
         turnLock.current = turnIndex;
 
         let isMounted = true;
@@ -36,7 +30,9 @@ export default function CPUController() {
             await new Promise(r => setTimeout(r, 2500));
             if (!isMounted) return;
 
-            const myNotes = notes[currentPlayer.id] || {};
+            // Leemos el estado nuevamente justo en el momento de actuar
+            const currentState = useGameStore.getState();
+            const myNotes = currentState.notes[currentPlayer.id] || {};
 
             const availableSuspects = gameData.characters.filter(c => !myNotes[c.name]).map(c => c.name);
             const availableWeapons = gameData.weapons.filter(w => !myNotes[w.name]).map(w => w.name);
@@ -60,10 +56,13 @@ export default function CPUController() {
 
             const cardsToCheck = [suspect, weapon, location];
             let foundMatch = false;
-            let checkIndex = (turnIndex + 1) % players.length;
+
+            // Obtenemos los players directamente desde el motor para tener la info en tiempo real
+            const currentPlayers = useGameStore.getState().players;
+            let checkIndex = (turnIndex + 1) % currentPlayers.length;
 
             while (checkIndex !== turnIndex) {
-                const rival = players[checkIndex];
+                const rival = currentPlayers[checkIndex];
 
                 if (!rival.isEliminated) {
                     const matchingCards = rival.hand.filter(c => cardsToCheck.includes(c));
@@ -71,7 +70,8 @@ export default function CPUController() {
                     if (matchingCards.length > 0) {
                         const cardToShow = matchingCards[Math.floor(Math.random() * matchingCards.length)];
 
-                        toggleNote(currentPlayer.id, cardToShow);
+                        // ESTO YA NO ABORTARÁ EL EFECTO:
+                        useGameStore.getState().toggleNote(currentPlayer.id, cardToShow);
 
                         if (rival.type === 'human') {
                             setCpuMessage(`🤫 Tú le mostraste en secreto una carta a ${currentPlayer.name}.`);
@@ -83,7 +83,7 @@ export default function CPUController() {
                         break;
                     }
                 }
-                checkIndex = (checkIndex + 1) % players.length;
+                checkIndex = (checkIndex + 1) % currentPlayers.length;
             }
 
             if (!foundMatch) {
@@ -94,13 +94,14 @@ export default function CPUController() {
             if (!isMounted) return;
 
             setCpuMessage(null);
-            nextTurn();
+            // Avanzamos turno directamente desde el estado
+            useGameStore.getState().nextTurn();
         };
 
         playTurn();
 
         return () => { isMounted = false; };
-    }, [turnIndex, players, notes, toggleNote, nextTurn]);
+    }, [turnIndex]); // <--- La clave: el effect solo depende del índice del turno
 
     if (!cpuMessage) return null;
 
