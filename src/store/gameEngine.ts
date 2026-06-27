@@ -33,10 +33,12 @@ interface GameState {
 
     // Guardará quién te mostró qué carta, o 'no-match' si nadie tiene nada
     hypothesisResult: { refuterName: string; cardShown: string } | 'no-match' | null;
+    winner: Player | null; // Guardará al jugador que gane
 
     // Acciones
     checkHypothesis: (suspect: string, weapon: string, location: string) => void;
     clearHypothesisResult: () => void;
+    makeAccusation: (suspect: string, weapon: string, location: string) => boolean;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -47,6 +49,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     isGameActive: false,
     notes: {},
     hypothesisResult: null,
+    winner: null,
 
     // Iniciar el juego: barajar y repartir
     startGame: (humans, cpus) => {
@@ -182,4 +185,23 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     clearHypothesisResult: () => set({ hypothesisResult: null }),
+
+    makeAccusation: (suspect, weapon, location) => {
+        const { envelope, players, turnIndex, eliminatePlayer } = get();
+        if (!envelope) return false;
+
+        // Comprobamos si las 3 coinciden exactamente con el sobre
+        const isCorrect =
+            suspect === envelope.character &&
+            weapon === envelope.weapon &&
+            location === envelope.location;
+
+        if (isCorrect) {
+            set({ winner: players[turnIndex] });
+            return true;
+        } else {
+            eliminatePlayer(players[turnIndex].id);
+            return false;
+        }
+    },
 }));
