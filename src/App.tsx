@@ -4,6 +4,7 @@ import CoverScreen from './components/CoverScreen';
 import PlayerHand from './components/PlayerHand';
 import Board from './components/Board';
 import Notebook from './components/Notebook';
+import CPUController from './components/CPUController';
 
 function App() {
   const isGameActive = useGameStore((state) => state.isGameActive);
@@ -25,6 +26,9 @@ function App() {
 
           {/* El Tablero Interactivo */}
           <Board />
+
+          {/* El Controlador de la IA */}
+          <CPUController />
 
         </div>
       )}
