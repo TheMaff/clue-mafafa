@@ -1,43 +1,25 @@
 // src/store/gameEngine.ts
 import { create } from 'zustand';
-import type { GameData, Player, Envelope } from '../types';
+import type { GameData, Player, Envelope as SecretEnvelope } from '../types'; // Mantenemos tus tipos originales
 import gameDataJson from '../data/game-data.json';
-import { db } from '../lib/firebase'; 
-import { ref, set, get, onValue, update, child } from 'firebase/database';
+import { db } from '../lib/firebase';
+// MIRA AQUÍ: Renombramos set y get de Firebase para que no peleen con Zustand
+import { ref, set as firebaseSet, get as firebaseGet, onValue, update, child } from 'firebase/database';
 
-// Casteamos el JSON para que TypeScript confíe en su estructura
 const rawData = gameDataJson as GameData;
 
-// Nuestro confiable algoritmo Fisher-Yates
 const shuffleArray = <T>(array: T[]): T[] => {
-    const arr = [...array];
-    for (let i = arr.length - 1; i > 0; i--) {
+    const newArr = [...array];
+    for (let i = newArr.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
-        [arr[i], arr[j]] = [arr[j], arr[i]];
+        [newArr[i], newArr[j]] = [newArr[j], newArr[i]];
     }
-    return arr;
+    return newArr;
 };
 
-// --- Tipos e Interfaces ---
-export interface Player {
-    id: string;
-    name: string;
-    avatar: string;
-    type: 'human' | 'cpu';
-    hand: string[];
-    isEliminated?: boolean;
-}
-
-interface SecretEnvelope {
-    character: string;
-    weapon: string;
-    location: string;
-}
-
-// Definimos qué hace y qué guarda nuestro motor
-interface GameState {
+export interface GameState {
     players: Player[];
-    envelope: Envelope | null;
+    envelope: SecretEnvelope | null;
     turnIndex: number;
     isGameActive: boolean;
     notes: Record<string, Record<string, boolean>>;
@@ -91,7 +73,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         const shuffledLocations = shuffleArray(rawData.locations);
 
         // 2. Separar el sobre confidencial (1 carta de cada mazo)
-        const secretEnvelope: Envelope = {
+        const secretEnvelope: SecretEnvelope = {
             character: shuffledCharacters.pop()!.name,
             weapon: shuffledWeapons.pop()!.name,
             location: shuffledLocations.pop()!.name,
@@ -240,41 +222,44 @@ export const useGameStore = create<GameState>((set, get) => ({
     // --- LÓGICA MULTIJUGADOR CON FIREBASE ---
 
     createMultiplayerRoom: async (hostName, hostAvatar) => {
-    const roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
-    const myId = `player_${Math.random().toString(36).substring(2, 9)}`;
+        const roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
+        const myId = `player_${Math.random().toString(36).substring(2, 9)}`;
 
-    // Estructura inicial de la sala en Firebase
-    const roomRef = ref(db, `rooms/${roomCode}`);
-    await set(roomRef, {
-        status: 'waiting',
-        hostId: myId,
-        players: {
-        [myId]: { name: hostName, avatar: hostAvatar, isHost: true }
-        }
-    });
+        const roomRef = ref(db, `rooms/${roomCode}`);
 
-    set({ roomId: roomCode, isHost: true, myPlayerId: myId });
-    get().listenToRoom(roomCode); // Empezamos a escuchar cambios
-    return roomCode;
+        // Usamos firebaseSet en lugar de set
+        await firebaseSet(roomRef, {
+            status: 'waiting',
+            hostId: myId,
+            players: {
+                [myId]: { name: hostName, avatar: hostAvatar, isHost: true }
+            }
+        });
+
+        // Este es el set normal de Zustand, ¡ahora conviven en paz!
+        set({ roomId: roomCode, isHost: true, myPlayerId: myId });
+        get().listenToRoom(roomCode);
+        return roomCode;
     },
 
     joinMultiplayerRoom: async (roomCode, guestName, guestAvatar) => {
-    const roomRef = ref(db, `rooms/${roomCode}`);
-    const snapshot = await get(roomRef);
+        const roomRef = ref(db, `rooms/${roomCode}`);
 
-    if (snapshot.exists() && snapshot.val().status === 'waiting') {
-        const myId = `player_${Math.random().toString(36).substring(2, 9)}`;
-        
-        // Añadimos al nuevo jugador al nodo de "players" de esa sala
-        await update(child(roomRef, 'players'), {
-        [myId]: { name: guestName, avatar: guestAvatar, isHost: false }
-        });
+        // Usamos firebaseGet en lugar de get
+        const snapshot = await firebaseGet(roomRef);
 
-        set({ roomId: roomCode, isHost: false, myPlayerId: myId });
-        get().listenToRoom(roomCode);
-        return true;
-    }
-    return false; // Sala no existe o ya empezó
+        if (snapshot.exists() && snapshot.val().status === 'waiting') {
+            const myId = `player_${Math.random().toString(36).substring(2, 9)}`;
+
+            await update(child(roomRef, 'players'), {
+                [myId]: { name: guestName, avatar: guestAvatar, isHost: false }
+            });
+
+            set({ roomId: roomCode, isHost: false, myPlayerId: myId });
+            get().listenToRoom(roomCode);
+            return true;
+        }
+        return false;
     },
 
     listenToRoom: (roomCode) => {
