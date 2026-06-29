@@ -2,6 +2,8 @@
 import { create } from 'zustand';
 import type { GameData, Player, Envelope } from '../types';
 import gameDataJson from '../data/game-data.json';
+import { db } from '../lib/firebase'; 
+import { ref, set, get, onValue, update, child } from 'firebase/database';
 
 // Casteamos el JSON para que TypeScript confíe en su estructura
 const rawData = gameDataJson as GameData;
@@ -16,6 +18,22 @@ const shuffleArray = <T>(array: T[]): T[] => {
     return arr;
 };
 
+// --- Tipos e Interfaces ---
+export interface Player {
+    id: string;
+    name: string;
+    avatar: string;
+    type: 'human' | 'cpu';
+    hand: string[];
+    isEliminated?: boolean;
+}
+
+interface SecretEnvelope {
+    character: string;
+    weapon: string;
+    location: string;
+}
+
 // Definimos qué hace y qué guarda nuestro motor
 interface GameState {
     players: Player[];
@@ -23,22 +41,30 @@ interface GameState {
     turnIndex: number;
     isGameActive: boolean;
     notes: Record<string, Record<string, boolean>>;
+    // Guardará quién te mostró qué carta, o 'no-match' si nadie tiene nada
+    hypothesisResult: { refuterName: string; cardShown: string } | 'no-match' | null;
+    winner: Player | null; // Guardará al jugador que gane
+
+    // --- NUEVOS ESTADOS MULTIJUGADOR ---
+    roomId: string | null;
+    isHost: boolean;
+    remotePlayers: any[]; // Lista temporal de jugadores en la sala de espera
+    myPlayerId: string | null;
 
     // Acciones
     startGame: (humans: { name: string; avatar: string }[], cpus: { name: string; avatar: string }[]) => void;
     nextTurn: () => void;
     eliminatePlayer: (playerId: string) => void;
-    // Le pasamos el ID del jugador que está tachando la nota
     toggleNote: (playerId: string, cardName: string) => void;
-
-    // Guardará quién te mostró qué carta, o 'no-match' si nadie tiene nada
-    hypothesisResult: { refuterName: string; cardShown: string } | 'no-match' | null;
-    winner: Player | null; // Guardará al jugador que gane
-
-    // Acciones
     checkHypothesis: (suspect: string, weapon: string, location: string) => void;
     clearHypothesisResult: () => void;
     makeAccusation: (suspect: string, weapon: string, location: string) => boolean;
+
+    // --- NUEVAS ACCIONES MULTIJUGADOR ---
+    createMultiplayerRoom: (hostName: string, hostAvatar: string) => Promise<string>;
+    joinMultiplayerRoom: (roomCode: string, guestName: string, guestAvatar: string) => Promise<boolean>;
+    listenToRoom: (roomCode: string) => void;
+    leaveRoom: () => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -50,6 +76,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     notes: {},
     hypothesisResult: null,
     winner: null,
+
+    // Estados multijugador iniciales
+    roomId: null,
+    isHost: false,
+    remotePlayers: [],
+    myPlayerId: null,
 
     // Iniciar el juego: barajar y repartir
     startGame: (humans, cpus) => {
@@ -204,4 +236,70 @@ export const useGameStore = create<GameState>((set, get) => ({
             return false;
         }
     },
+
+    // --- LÓGICA MULTIJUGADOR CON FIREBASE ---
+
+    createMultiplayerRoom: async (hostName, hostAvatar) => {
+    const roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
+    const myId = `player_${Math.random().toString(36).substring(2, 9)}`;
+
+    // Estructura inicial de la sala en Firebase
+    const roomRef = ref(db, `rooms/${roomCode}`);
+    await set(roomRef, {
+        status: 'waiting',
+        hostId: myId,
+        players: {
+        [myId]: { name: hostName, avatar: hostAvatar, isHost: true }
+        }
+    });
+
+    set({ roomId: roomCode, isHost: true, myPlayerId: myId });
+    get().listenToRoom(roomCode); // Empezamos a escuchar cambios
+    return roomCode;
+    },
+
+    joinMultiplayerRoom: async (roomCode, guestName, guestAvatar) => {
+    const roomRef = ref(db, `rooms/${roomCode}`);
+    const snapshot = await get(roomRef);
+
+    if (snapshot.exists() && snapshot.val().status === 'waiting') {
+        const myId = `player_${Math.random().toString(36).substring(2, 9)}`;
+        
+        // Añadimos al nuevo jugador al nodo de "players" de esa sala
+        await update(child(roomRef, 'players'), {
+        [myId]: { name: guestName, avatar: guestAvatar, isHost: false }
+        });
+
+        set({ roomId: roomCode, isHost: false, myPlayerId: myId });
+        get().listenToRoom(roomCode);
+        return true;
+    }
+    return false; // Sala no existe o ya empezó
+    },
+
+    listenToRoom: (roomCode) => {
+    const roomRef = ref(db, `rooms/${roomCode}`);
+
+    // onValue es el WebSocket de Firebase: se ejecuta cada vez que algo cambia en esa sala
+    onValue(roomRef, (snapshot) => {
+        if (snapshot.exists()) {
+        const data = snapshot.val();
+        
+        // Transformamos el objeto de Firebase a un array para usarlo en React
+        const playersArray = Object.keys(data.players || {}).map(key => ({
+            id: key,
+            ...data.players[key]
+        }));
+
+        set({ remotePlayers: playersArray });
+
+        // Si el host cambió el status a 'playing', aquí dispararemos el inicio del juego (próximo ticket)
+        }
+    });
+    },
+
+    leaveRoom: () => {
+    set({ roomId: null, isHost: false, remotePlayers: [], myPlayerId: null });
+    // Idealmente aquí también borraríamos nuestro jugador de Firebase, pero lo mantendremos simple
+    }
 }));
