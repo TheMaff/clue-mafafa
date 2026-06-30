@@ -12,7 +12,8 @@ export default function CoverScreen() {
         roomId,
         isHost,
         remotePlayers,
-        leaveRoom
+        leaveRoom,
+        startMultiplayerGame
     } = useGameStore();
 
     const [view, setView] = useState<'home' | 'solo' | 'multiplayer' | 'lobby'>('home');
@@ -205,6 +206,7 @@ export default function CoverScreen() {
                         <div className="flex flex-col gap-3">
                             {isHost ? (
                                 <button
+                                    onClick={startMultiplayerGame} // <--- CONECTA LA FUNCIÓN AQUÍ
                                     disabled={remotePlayers.length < 2}
                                     className="w-full py-4 px-6 bg-green-600 hover:bg-green-500 transition-colors rounded-xl font-bold text-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(34,197,94,0.4)]"
                                 >

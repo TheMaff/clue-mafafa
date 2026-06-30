@@ -47,6 +47,7 @@ export interface GameState {
     joinMultiplayerRoom: (roomCode: string, guestName: string, guestAvatar: string) => Promise<boolean>;
     listenToRoom: (roomCode: string) => void;
     leaveRoom: () => void;
+    startMultiplayerGame: () => Promise<void>;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -263,24 +264,90 @@ export const useGameStore = create<GameState>((set, get) => ({
     },
 
     listenToRoom: (roomCode) => {
-    const roomRef = ref(db, `rooms/${roomCode}`);
+        const roomRef = ref(db, `rooms/${roomCode}`);
 
-    // onValue es el WebSocket de Firebase: se ejecuta cada vez que algo cambia en esa sala
-    onValue(roomRef, (snapshot) => {
-        if (snapshot.exists()) {
-        const data = snapshot.val();
-        
-        // Transformamos el objeto de Firebase a un array para usarlo en React
-        const playersArray = Object.keys(data.players || {}).map(key => ({
-            id: key,
-            ...data.players[key]
-        }));
+        onValue(roomRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
 
-        set({ remotePlayers: playersArray });
+                const playersArray = Object.keys(data.players || {}).map(key => ({
+                    id: key,
+                    ...data.players[key]
+                }));
 
-        // Si el host cambió el status a 'playing', aquí dispararemos el inicio del juego (próximo ticket)
+                // Actualizamos la lista de espera
+                set({ remotePlayers: playersArray });
+
+                // EL GATILLO MÁGICO: Si el Host cambió el estado a 'playing', arrancamos el juego
+                if (data.status === 'playing' && !get().isGameActive) {
+                    const myId = get().myPlayerId;
+                    const myPlayer = playersArray.find(p => p.id === myId);
+
+                    // Preparamos la libreta privada del jugador con sus propias cartas ya tachadas
+                    const initialNotes: Record<string, Record<string, boolean>> = {};
+                    initialNotes[myId!] = {};
+
+                    if (myPlayer && myPlayer.hand) {
+                        myPlayer.hand.forEach((card: string) => {
+                            initialNotes[myId!][card] = true;
+                        });
+                    }
+
+                    // Inyectamos el estado de Firebase a nuestro Zustand local
+                    set({
+                        players: playersArray, // Ahora los jugadores oficiales son los de Firebase
+                        envelope: data.envelope,
+                        turnIndex: data.turnIndex || 0,
+                        isGameActive: true, // Esto oculta el CoverScreen y muestra el Board
+                        notes: initialNotes
+                    });
+                }
+            }
+        });
+    },
+
+    startMultiplayerGame: async () => {
+        const { roomId, remotePlayers } = get();
+        if (!roomId) return;
+
+        // 1. Preparamos los mazos
+        const suspects = shuffleArray([...gameDataJson.characters.map(c => c.name)]);
+        const weapons = shuffleArray([...gameDataJson.weapons.map(w => w.name)]);
+        const locations = shuffleArray([...gameDataJson.locations.map(l => l.name)]);
+
+        // 2. Extraemos el sobre secreto
+        const secretEnvelope = {
+            character: suspects.pop()!,
+            weapon: weapons.pop()!,
+            location: locations.pop()!
+        };
+
+        // 3. Juntamos lo que sobra y barajamos todo
+        const remainingCards = shuffleArray([...suspects, ...weapons, ...locations]);
+
+        // 4. Clonamos a los jugadores y les repartimos equitativamente
+        const playersWithHands = remotePlayers.map(p => ({ ...p, hand: [] as string[], type: 'human' }));
+
+        let currentPlayerIndex = 0;
+        while (remainingCards.length > 0) {
+            playersWithHands[currentPlayerIndex].hand.push(remainingCards.pop()!);
+            currentPlayerIndex = (currentPlayerIndex + 1) % playersWithHands.length;
         }
-    });
+
+        // 5. Convertimos el array de vuelta a objeto para guardarlo ordenado en Firebase
+        const firebasePlayers = playersWithHands.reduce((acc, player) => {
+            acc[player.id] = player;
+            return acc;
+        }, {} as Record<string, any>);
+
+        // 6. Impactamos la base de datos (Esto disparará el onValue de todos los conectados)
+        const roomRef = ref(db, `rooms/${roomId}`);
+        await update(roomRef, {
+            status: 'playing',
+            envelope: secretEnvelope,
+            players: firebasePlayers,
+            turnIndex: 0
+        });
     },
 
     leaveRoom: () => {
