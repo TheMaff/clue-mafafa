@@ -3,6 +3,7 @@ import { useGameStore } from './store/gameEngine';
 import CoverScreen from './components/CoverScreen';
 import PlayerHand from './components/PlayerHand';
 import Board from './components/Board';
+import GameHeader from './components/GameHeader';
 import Notebook from './components/Notebook';
 import CPUController from './components/CPUController';
 
@@ -22,6 +23,7 @@ function App() {
             <h2 className="text-2xl md:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-500">
               Misterio en Coquimbo
             </h2>
+            <GameHeader />
           </header>
 
           {/* El Tablero Interactivo */}

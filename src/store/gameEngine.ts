@@ -1,9 +1,8 @@
 // src/store/gameEngine.ts
 import { create } from 'zustand';
-import type { GameData, Player, Envelope as SecretEnvelope } from '../types'; // Mantenemos tus tipos originales
+import type { GameData, Player, Envelope as SecretEnvelope } from '../types';
 import gameDataJson from '../data/game-data.json';
 import { db } from '../lib/firebase';
-// MIRA AQUÍ: Renombramos set y get de Firebase para que no peleen con Zustand
 import { ref, set as firebaseSet, get as firebaseGet, onValue, update, child } from 'firebase/database';
 
 const rawData = gameDataJson as GameData;
@@ -23,35 +22,28 @@ export interface GameState {
     turnIndex: number;
     isGameActive: boolean;
     notes: Record<string, Record<string, boolean>>;
-    // Guardará quién te mostró qué carta, o 'no-match' si nadie tiene nada
-    hypothesisResult: { refuterName: string; cardShown: string } | 'no-match' | null;
-    winner: Player | null; // Guardará al jugador que gane
-
-    // --- NUEVOS ESTADOS MULTIJUGADOR ---
+    hypothesisResult: any;
+    winner: Player | null;
     roomId: string | null;
     isHost: boolean;
-    remotePlayers: any[]; // Lista temporal de jugadores en la sala de espera
+    remotePlayers: any[];
     myPlayerId: string | null;
 
-    // Acciones
-    startGame: (humans: { name: string; avatar: string }[], cpus: { name: string; avatar: string }[]) => void;
-    nextTurn: () => void;
+    startGame: (humanPlayers: Partial<Player>[], cpuPlayers: Partial<Player>[]) => void;
+    nextTurn: () => Promise<void>;
     eliminatePlayer: (playerId: string) => void;
     toggleNote: (playerId: string, cardName: string) => void;
-    checkHypothesis: (suspect: string, weapon: string, location: string) => void;
-    clearHypothesisResult: () => void;
+    checkHypothesis: (suspect: string, weapon: string, location: string) => Promise<void>;
+    clearHypothesisResult: () => Promise<void>;
     makeAccusation: (suspect: string, weapon: string, location: string) => boolean;
-
-    // --- NUEVAS ACCIONES MULTIJUGADOR ---
     createMultiplayerRoom: (hostName: string, hostAvatar: string) => Promise<string>;
     joinMultiplayerRoom: (roomCode: string, guestName: string, guestAvatar: string) => Promise<boolean>;
+    startMultiplayerGame: () => Promise<void>;
     listenToRoom: (roomCode: string) => void;
     leaveRoom: () => void;
-    startMultiplayerGame: () => Promise<void>;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
-    // Estado inicial
     players: [],
     envelope: null,
     turnIndex: 0,
@@ -59,185 +51,146 @@ export const useGameStore = create<GameState>((set, get) => ({
     notes: {},
     hypothesisResult: null,
     winner: null,
-
-    // Estados multijugador iniciales
     roomId: null,
     isHost: false,
     remotePlayers: [],
     myPlayerId: null,
 
-    // Iniciar el juego: barajar y repartir
-    startGame: (humans, cpus) => {
-        // 1. Barajar cada mazo por separado
-        const shuffledCharacters = shuffleArray(rawData.characters);
-        const shuffledWeapons = shuffleArray(rawData.weapons);
-        const shuffledLocations = shuffleArray(rawData.locations);
+    startGame: (humanPlayers, cpuPlayers) => {
+        // Modo solitario clásico offline
+        const allPlayers = [...humanPlayers, ...cpuPlayers].map((p, idx) => ({
+            id: p.id || `player_${idx}`,
+            name: p.name!,
+            avatar: p.avatar!,
+            type: p.type || 'cpu',
+            hand: [],
+            isEliminated: false
+        })) as Player[];
 
-        // 2. Separar el sobre confidencial (1 carta de cada mazo)
-        const secretEnvelope: SecretEnvelope = {
-            character: shuffledCharacters.pop()!.name,
-            weapon: shuffledWeapons.pop()!.name,
-            location: shuffledLocations.pop()!.name,
-        };
+        const suspects = shuffleArray(rawData.characters.map(c => c.name));
+        const weapons = shuffleArray(rawData.weapons.map(w => w.name));
+        const locations = shuffleArray(rawData.locations.map(l => l.name));
 
-        // 3. Unir y barajar el gran mazo restante
-        const remainingDeck = [
-            ...shuffledCharacters.map(c => c.name),
-            ...shuffledWeapons.map(w => w.name),
-            ...shuffledLocations.map(l => l.name),
-        ];
-        const shuffledDeck = shuffleArray(remainingDeck);
+        const secretEnvelope = { character: suspects.pop()!, weapon: weapons.pop()!, location: locations.pop()! };
+        const remainingCards = shuffleArray([...suspects, ...weapons, ...locations]);
 
-        // 4. Inscribir a todos los jugadores
-        const allPlayers: Player[] = [];
+        let currentPlayerIndex = 0;
+        while (remainingCards.length > 0) {
+            allPlayers[currentPlayerIndex].hand.push(remainingCards.pop()!);
+            currentPlayerIndex = (currentPlayerIndex + 1) % allPlayers.length;
+        }
 
-        humans.forEach((h, index) => {
-            allPlayers.push({ id: `human-${index}`, name: h.name, avatar: h.avatar, type: 'human', hand: [], isEliminated: false });
-        });
-
-        cpus.forEach((c, index) => {
-            allPlayers.push({ id: `cpu-${index}`, name: c.name, avatar: c.avatar, type: 'cpu', hand: [], isEliminated: false });
-        });
-
-        // 5. Repartir el mazo como si fuera un crupier real
-        shuffledDeck.forEach((cardName, index) => {
-            const playerToReceive = allPlayers[index % allPlayers.length];
-            playerToReceive.hand.push(cardName);
-        });
-
-        // Autotachar las cartas en la libreta para los jugadores humanos
         const initialNotes: Record<string, Record<string, boolean>> = {};
         allPlayers.forEach(player => {
-            // Creamos una libreta en blanco para CADA jugador
             initialNotes[player.id] = {};
             if (player.type === 'human') {
-                player.hand.forEach(card => {
-                    initialNotes[player.id][card] = true;
-                });
+                player.hand.forEach(card => { initialNotes[player.id][card] = true; });
             }
         });
 
-        // 6. Arrancar la partida
-        set({
-            players: allPlayers,
-            envelope: secretEnvelope,
-            turnIndex: 0,
-            isGameActive: true,
-            notes: initialNotes,
-        });
+        set({ players: allPlayers, envelope: secretEnvelope, turnIndex: 0, isGameActive: true, notes: initialNotes, roomId: null });
     },
 
-    // Pasar al siguiente turno omitiendo eliminados
-    nextTurn: () => {
-        const { players, turnIndex } = get();
-        let nextIndex = turnIndex;
+    nextTurn: async () => {
+        const { roomId, turnIndex, players } = get();
+        const nextIdx = (turnIndex + 1) % players.length;
 
-        do {
-            nextIndex = (nextIndex + 1) % players.length;
-        } while (players[nextIndex].isEliminated);
-
-        set({ turnIndex: nextIndex });
+        if (roomId) {
+            // Sincronización remota: actualizamos el turno y limpiamos la sospecha anterior en la nube
+            await update(ref(db, `rooms/${roomId}`), {
+                turnIndex: nextIdx,
+                hypothesisResult: null
+            });
+        } else {
+            set({ turnIndex: nextIdx, hypothesisResult: null });
+        }
     },
 
-    // Marcar a un jugador como eliminado (por hacer una acusación final falsa)
     eliminatePlayer: (playerId) => {
-        const { players } = get();
-        const updatedPlayers = players.map(p =>
-            p.id === playerId ? { ...p, isEliminated: true } : p
-        );
-        set({ players: updatedPlayers });
+        set((state) => ({
+            players: state.players.map(p => p.id === playerId ? { ...p, isEliminated: true } : p)
+        }));
     },
 
     toggleNote: (playerId, cardName) => {
-        const { notes } = get();
-        const playerNotes = notes[playerId] || {}; // Obtenemos la libreta de ese jugador
-
-        set({
-            notes: {
-                ...notes,
-                [playerId]: {
-                    ...playerNotes,
-                    [cardName]: !playerNotes[cardName] // Invierte el valor actual solo para él
+        set((state) => {
+            const playerNotes = state.notes[playerId] || {};
+            return {
+                notes: {
+                    ...state.notes,
+                    [playerId]: {
+                        ...playerNotes,
+                        [cardName]: !playerNotes[cardName]
+                    }
                 }
-            }
+            };
         });
     },
 
-    checkHypothesis: (suspect, weapon, location) => {
-        const { players, turnIndex } = get();
+    checkHypothesis: async (suspect, weapon, location) => {
+        const { roomId, players, turnIndex } = get();
         const cardsToCheck = [suspect, weapon, location];
+        let result: any = 'no-match';
 
-        let foundMatch = false;
-
-        // Empezamos a preguntar por el jugador a nuestra izquierda
         let currentIndex = (turnIndex + 1) % players.length;
-
-        // Iteramos por toda la mesa hasta volver a nosotros mismos
         while (currentIndex !== turnIndex) {
             const rival = players[currentIndex];
-
             if (!rival.isEliminated) {
-                // Vemos si el rival tiene alguna de las cartas sugeridas
                 const matchingCards = rival.hand.filter(card => cardsToCheck.includes(card));
-
                 if (matchingCards.length > 0) {
-                    // Si tiene, elige una al azar para mostrar (automatizado para agilizar el juego)
                     const cardToShow = matchingCards[Math.floor(Math.random() * matchingCards.length)];
-
-                    set({ hypothesisResult: { refuterName: rival.name, cardShown: cardToShow } });
-                    foundMatch = true;
-                    break; // Rompemos el ciclo, ya nadie más debe mostrar cartas
+                    result = { refuterName: rival.name, cardShown: cardToShow, refuterId: rival.id };
+                    break;
                 }
             }
-            // Pasamos al siguiente jugador
             currentIndex = (currentIndex + 1) % players.length;
         }
 
-        // Si dimos toda la vuelta y nadie tiene nada
-        if (!foundMatch) {
-            set({ hypothesisResult: 'no-match' });
+        if (roomId) {
+            // Subimos el resultado del interrogatorio a Firebase para que todos los dispositivos lo vean
+            await update(ref(db, `rooms/${roomId}`), { hypothesisResult: result });
+        } else {
+            set({ hypothesisResult: result });
         }
     },
 
-    clearHypothesisResult: () => set({ hypothesisResult: null }),
+    clearHypothesisResult: async () => {
+        const { roomId } = get();
+        if (roomId) {
+            await update(ref(db, `rooms/${roomId}`), { hypothesisResult: null });
+        } else {
+            set({ hypothesisResult: null });
+        }
+    },
 
     makeAccusation: (suspect, weapon, location) => {
-        const { envelope, players, turnIndex, eliminatePlayer } = get();
+        const { envelope, players, turnIndex } = get();
         if (!envelope) return false;
 
-        // Comprobamos si las 3 coinciden exactamente con el sobre
-        const isCorrect =
-            suspect === envelope.character &&
-            weapon === envelope.weapon &&
-            location === envelope.location;
+        const isCorrect = suspect === envelope.character && weapon === envelope.weapon && location === envelope.location;
 
         if (isCorrect) {
             set({ winner: players[turnIndex] });
             return true;
         } else {
-            eliminatePlayer(players[turnIndex].id);
+            get().eliminatePlayer(players[turnIndex].id);
             return false;
         }
     },
-
-    // --- LÓGICA MULTIJUGADOR CON FIREBASE ---
 
     createMultiplayerRoom: async (hostName, hostAvatar) => {
         const roomCode = Math.random().toString(36).substring(2, 7).toUpperCase();
         const myId = `player_${Math.random().toString(36).substring(2, 9)}`;
 
         const roomRef = ref(db, `rooms/${roomCode}`);
-
-        // Usamos firebaseSet en lugar de set
         await firebaseSet(roomRef, {
             status: 'waiting',
             hostId: myId,
             players: {
-                [myId]: { name: hostName, avatar: hostAvatar, isHost: true }
+                [myId]: { id: myId, name: hostName, avatar: hostAvatar, isHost: true, hand: [], type: 'human' }
             }
         });
 
-        // Este es el set normal de Zustand, ¡ahora conviven en paz!
         set({ roomId: roomCode, isHost: true, myPlayerId: myId });
         get().listenToRoom(roomCode);
         return roomCode;
@@ -245,15 +198,12 @@ export const useGameStore = create<GameState>((set, get) => ({
 
     joinMultiplayerRoom: async (roomCode, guestName, guestAvatar) => {
         const roomRef = ref(db, `rooms/${roomCode}`);
-
-        // Usamos firebaseGet en lugar de get
         const snapshot = await firebaseGet(roomRef);
 
         if (snapshot.exists() && snapshot.val().status === 'waiting') {
             const myId = `player_${Math.random().toString(36).substring(2, 9)}`;
-
             await update(child(roomRef, 'players'), {
-                [myId]: { name: guestName, avatar: guestAvatar, isHost: false }
+                [myId]: { id: myId, name: guestName, avatar: guestAvatar, isHost: false, hand: [], type: 'human' }
             });
 
             set({ roomId: roomCode, isHost: false, myPlayerId: myId });
@@ -261,49 +211,6 @@ export const useGameStore = create<GameState>((set, get) => ({
             return true;
         }
         return false;
-    },
-
-    listenToRoom: (roomCode) => {
-        const roomRef = ref(db, `rooms/${roomCode}`);
-
-        onValue(roomRef, (snapshot) => {
-            if (snapshot.exists()) {
-                const data = snapshot.val();
-
-                const playersArray = Object.keys(data.players || {}).map(key => ({
-                    id: key,
-                    ...data.players[key]
-                }));
-
-                // Actualizamos la lista de espera
-                set({ remotePlayers: playersArray });
-
-                // EL GATILLO MÁGICO: Si el Host cambió el estado a 'playing', arrancamos el juego
-                if (data.status === 'playing' && !get().isGameActive) {
-                    const myId = get().myPlayerId;
-                    const myPlayer = playersArray.find(p => p.id === myId);
-
-                    // Preparamos la libreta privada del jugador con sus propias cartas ya tachadas
-                    const initialNotes: Record<string, Record<string, boolean>> = {};
-                    initialNotes[myId!] = {};
-
-                    if (myPlayer && myPlayer.hand) {
-                        myPlayer.hand.forEach((card: string) => {
-                            initialNotes[myId!][card] = true;
-                        });
-                    }
-
-                    // Inyectamos el estado de Firebase a nuestro Zustand local
-                    set({
-                        players: playersArray, // Ahora los jugadores oficiales son los de Firebase
-                        envelope: data.envelope,
-                        turnIndex: data.turnIndex || 0,
-                        isGameActive: true, // Esto oculta el CoverScreen y muestra el Board
-                        notes: initialNotes
-                    });
-                }
-            }
-        });
     },
 
     startMultiplayerGame: async () => {
@@ -350,8 +257,52 @@ export const useGameStore = create<GameState>((set, get) => ({
         });
     },
 
+
+    listenToRoom: (roomCode) => {
+        const roomRef = ref(db, `rooms/${roomCode}`);
+
+        onValue(roomRef, (snapshot) => {
+            if (snapshot.exists()) {
+                const data = snapshot.val();
+
+                const playersArray = Object.keys(data.players || {}).map(key => ({
+                    ...data.players[key]
+                }));
+
+                set({ remotePlayers: playersArray });
+
+                if (data.status === 'playing') {
+                    const myId = get().myPlayerId;
+                    const isGameStarting = !get().isGameActive;
+
+                    // FIX LIBRETA: Solo inicializamos las notas si la partida está arrancando de cero.
+                    // Si ya estaba activa, preservamos de forma estricta las anotaciones locales existentes.
+                    let currentNotes = get().notes;
+
+                    if (isGameStarting && myId) {
+                        const myPlayer = playersArray.find(p => p.id === myId);
+                        const playerNotes: Record<string, boolean> = {};
+                        if (myPlayer && myPlayer.hand) {
+                            myPlayer.hand.forEach((card: string) => { playerNotes[card] = true; });
+                        }
+                        currentNotes = { ...currentNotes, [myId]: playerNotes };
+                    }
+
+                    set({
+                        players: playersArray,
+                        envelope: data.envelope,
+                        turnIndex: data.turnIndex || 0,
+                        hypothesisResult: data.hypothesisResult !== undefined ? data.hypothesisResult : null,
+                        winner: data.winner || null,
+                        isGameActive: true,
+                        notes: currentNotes
+                    });
+                }
+            }
+        });
+    },
+
     leaveRoom: () => {
-    set({ roomId: null, isHost: false, remotePlayers: [], myPlayerId: null });
-    // Idealmente aquí también borraríamos nuestro jugador de Firebase, pero lo mantendremos simple
+        set({ roomId: null, isHost: false, remotePlayers: [], myPlayerId: null, isGameActive: false });
     }
 }));
