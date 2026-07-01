@@ -19,7 +19,7 @@ export default function HypothesisModal({ roomName, onClose, onSubmit }: Hypothe
     };
 
     return (
-        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4 animate-fade-in">
+        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center p-4 animate-fade-in">
             <div className="bg-[#1E1E24] border border-gray-700 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
 
                 {/* Cabecera del Modal */}

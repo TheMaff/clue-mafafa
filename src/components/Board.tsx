@@ -11,6 +11,9 @@ export default function Board() {
     const turnIndex = useGameStore((state) => state.turnIndex);
     const currentPlayer = players[turnIndex];
 
+    const myPlayerId = useGameStore((state) => state.myPlayerId);
+    const isMyTurn = myPlayerId ? currentPlayer?.id === myPlayerId : currentPlayer?.type === 'human';
+
     // Lógica de Sospecha
     const checkHypothesis = useGameStore((state) => state.checkHypothesis);
     const hypothesisResult = useGameStore((state) => state.hypothesisResult);
@@ -111,7 +114,8 @@ export default function Board() {
                                 <button
                                     key="center"
                                     onClick={() => setShowAccusationModal(true)}
-                                    disabled={currentPlayer?.type !== 'human' || currentPlayer?.isEliminated}
+                                    // disabled={currentPlayer?.type !== 'human' || currentPlayer?.isEliminated}
+                                    disabled={!isMyTurn || currentPlayer?.isEliminated}
                                     className="flex items-center justify-center bg-[#2C2D33] rounded-xl border-2 border-dashed border-red-900/50 hover:border-red-500 transition-colors shadow-inner group disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <span className="text-gray-500 group-hover:text-red-400 font-bold uppercase tracking-widest text-center text-sm md:text-base transition-colors">
@@ -127,7 +131,8 @@ export default function Board() {
                             <button
                                 key={cell.name}
                                 onClick={() => handleEnterRoom(cell.name!)}
-                                disabled={currentPlayer?.type !== 'human' || currentPlayer?.isEliminated}
+                                // disabled={currentPlayer?.type !== 'human' || currentPlayer?.isEliminated}
+                                disabled={!isMyTurn || currentPlayer?.isEliminated}
                                 className="relative group overflow-hidden rounded-xl border-2 border-gray-700 hover:border-green-400 transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-green-500/50 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 <div
