@@ -25,16 +25,18 @@ export default function CoverScreen() {
     const [roomCodeInput, setRoomCodeInput] = useState('');
 
     const handleStartSolo = () => {
-        const humanPlayers = [{ name: playerName || 'Detective', avatar: selectedAvatar }];
+        // FIX: Agregamos type: 'human' para que el motor te reconozca y te dé el control
+        const humanPlayers = [{ name: playerName || 'Detective', avatar: selectedAvatar, type: 'human' as const }];
         const availableCpuAvatars = gameData.characters.map(c => c.img).filter(img => img !== selectedAvatar);
         const cpuPlayers = [];
-
+        
         for (let i = 0; i < cpuCount; i++) {
-            const cpuAvatar = availableCpuAvatars[i % availableCpuAvatars.length];
-            const cpuName = gameData.characters.find(c => c.img === cpuAvatar)?.name || `CPU ${i + 1}`;
-            cpuPlayers.push({ name: cpuName, avatar: cpuAvatar });
+        const cpuAvatar = availableCpuAvatars[i % availableCpuAvatars.length];
+        const cpuName = gameData.characters.find(c => c.img === cpuAvatar)?.name || `CPU ${i + 1}`;
+        // FIX: Agregamos type: 'cpu' a los rivales
+        cpuPlayers.push({ name: cpuName, avatar: cpuAvatar, type: 'cpu' as const });
         }
-
+        
         startGame(humanPlayers, cpuPlayers);
     };
 

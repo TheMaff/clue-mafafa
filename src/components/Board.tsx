@@ -161,7 +161,7 @@ export default function Board() {
             )}
 
             {/* MODAL 2: RESULTADO DEL INTERROGATORIO */}
-            {hypothesisResult && (
+            {hypothesisResult && isMyTurn && (
                 <div className="fixed inset-0 bg-black/90 z-[60] flex items-center justify-center p-4 animate-fade-in-up">
                     <div className="bg-[#1E1E24] border-2 border-blue-500 rounded-2xl shadow-[0_0_50px_rgba(59,130,246,0.3)] p-8 max-w-md w-full text-center flex flex-col items-center">
 
