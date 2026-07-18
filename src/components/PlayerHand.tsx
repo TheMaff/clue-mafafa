@@ -39,7 +39,7 @@ export default function PlayerHand() {
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-3">
                         <img
-                            src={`/assets/${currentPlayer?.avatar}`}
+                            src={`/assets/${me.avatar}`}
                             alt="Avatar Turno"
                             className={`w-12 h-12 rounded-full border-2 ${isMyTurn ? 'border-green-500' : 'border-gray-500 opacity-60'} bg-gray-800`}
                         />
